@@ -1,0 +1,158 @@
+Sub Bild_Einfügen(strGroupName As String)
+ 
+    Dim ws As Worksheet
+    Dim lngi, lngj As Long
+    Dim shp As Shape
+    Dim shp1 As Shape
+    Dim strArray(), strSchadenTempArray(), strSchadenArray() As String
+    Dim shpRange As ShapeRange
+    Dim strGroupOldName As String
+    Dim strName As String
+    Dim posfirstshape As Integer
+    Dim flgTemp, flgVerbindungen As Boolean
+
+
+
+    Set ws = ThisWorkbook.Worksheets("Dashboard")
+
+ 
+    'Temp Bild löschen falls vorhanden
+    'Damit soll auch abgefangen werden, fall zwar ein Schaden eingetragen, nicht gespeichert und ein anderes Element gewählt wurde
+    
+    flgTemp = False
+    For Each shp In ws.Shapes
+        If shp.Name = "Temporär" Then
+            flgTemp = True
+        End If
+    Next
+    
+
+    'Nur durchführen, wenn auch eine Temporäre Gruppe vorhanden ist, sonst kann ja auch nichts ungespeichertes eingetragen worden sein.
+    If flgTemp Then
+        'Rausfinden, welches die alte Gruppe ist
+        For Each shp In ws.Shapes("Temporär").GroupItems
+        If InStr(shp.Name, "Zeichnung") > 0 Then
+            strGroupOldName = Replace(shp.Name, "Zeichnung", "Group")
+            strGroupOldName = Replace(strGroupOldName, " Temporär", "")
+        End If
+        Next
+        
+        lngi = 0
+        For Each shp In ws.Shapes(strGroupOldName).GroupItems
+            If InStr(shp.Name, "SchadenNr") > 0 Then
+                lngi = lngi + 1
+                ReDim Preserve strSchadenArray(1 To lngi)
+                strSchadenArray(lngi) = shp.Name
+            End If
+        Next
+            
+        lngj = 0
+        For Each shp In ws.Shapes("Temporär").GroupItems
+            If InStr(shp.Name, "SchadenNr") > 0 Then
+                lngj = lngj + 1
+                ReDim Preserve strSchadenTempArray(1 To lngj)
+                strSchadenTempArray(lngj) = shp.Name
+            End If
+        Next
+            
+        If lngi <> 0 Then
+            For lngi = 1 To UBound(strSchadenArray)
+                For lngj = 1 To UBound(strSchadenTempArray)
+                    If InStr(strSchadenTempArray(lngj), strSchadenArray(lngi)) > 0 Then
+                        strSchadenTempArray(lngj) = "Null"
+                    End If
+                Next
+            Next
+        End If
+    
+    End If
+    
+    On Error Resume Next
+    ws.Shapes("Temporär").Delete
+    For Each shp In ws.Shapes
+        If InStr(shp.Name, "Temporär") > 0 Then
+            shp.Delete
+        End If
+    Next
+    On Error GoTo 0
+    
+    If lngj <> 0 Then
+    'If UBound(strSchadenTempArray) <> 0 Then
+    For Each varstring In strSchadenTempArray
+        If varstring <> "Null" Then
+            For Each shp In ws.Shapes
+                'Hier soll das nicht gespeicherte Bild gelöscht werden. Problem ist, dass alles Temporäre mit der Gruppe gelöscht wird, aber die Bilder für sich alleine stehen.
+                ' Alles oben drüber dient erstmal dazu herauszufinden, welches das überzählige Bild ist.
+                If Replace(varstring, " Temporär", " Picture") = shp.Name Then
+                    shp.Delete
+                End If
+            Next
+        End If
+    Next
+    End If
+    
+    strName = Mid(strGroupName, 7, Len(strGroupName))
+    ws.Shapes(strGroupName).Ungroup
+    
+    'Bild in den freien Bereich kopieren
+
+        Set shp = ws.Shapes("Grafik " & strName).Duplicate
+        shp.Name = "Temporär"
+'        shp.Top = ws.Range("N12").Top
+'        shp.Left = ws.Range("N12").Left
+        shp.Top = ws.Shapes("Anzeigefenster").Top
+        shp.Left = ws.Shapes("Anzeigefenster").Left
+'        shp.Width = shp.Width * 3.82
+'        shp.Height = shp.Height * 3.82
+        shp.Height = shp.Height * (ws.Range("L2:R2").Width / shp.Width)
+        shp.Width = ws.Range("L2:R2").Width
+        
+        For Each shp1 In shp.GroupItems
+            shp1.Name = shp1.Name & " Temporär"
+        Next
+    
+    'Gruppen sortieren
+    'strGroupName = shp.ParentGroup.Name
+    'shp.ParentGroup.Ungroup
+    ReDim strArray(1 To 4)
+    strArray(1) = ws.Shapes("Grafik" & Mid(strGroupName, 6, Len(strGroupName))).Name
+    strArray(2) = ws.Shapes("Textfeld" & Mid(strGroupName, 6, Len(strGroupName))).Name
+    strArray(3) = ws.Shapes("Rechteck klein" & Mid(strGroupName, 6, Len(strGroupName))).Name
+    strArray(4) = ws.Shapes("Rechteck groß" & Mid(strGroupName, 6, Len(strGroupName))).Name
+    ws.Shapes.Range(strArray).Select
+    Set shpRange = Selection.ShapeRange
+    Set shp1 = shpRange.Group
+    shpRange.Name = strGroupName
+    
+    shp.OnAction = ""
+    ws.Shapes("Rahmen").ZOrder msoBringForward
+    Angehänte_Bilder_anzeigen (Mid(strGroupName, 6, Len(strGroupName)))
+    
+    'Beim direkten Wechsel können die Bilder "verloren gehen." Dazu soll an der Stelle einmal ein klarer Stand geschaffen werden.
+    'Alle Bilder in klein am rechten Rand
+    
+    For Each shp In ws.Shapes
+        If InStr(shp.Name, "Picture") > 0 Then
+            If InStr(shp.Name, Mid(strGroupName, 6, Len(strGroupName))) > 0 Then
+                intPositionLeft = ws.Range("T" & 12 + 3 * CInt(Mid(shp.Name, 10, 3))).Left
+                shp.Left = intPositionLeft
+                intPositionTop = ws.Range("T" & 12 + 3 * CInt(Mid(shp.Name, 10, 3))).Top
+                shp.Top = intPositionTop
+                Faktor = ws.Range("T12").Height * 2
+                shp.Height = Faktor
+                shp.Visible = True
+            Else
+                intPositionLeft = ws.Range("T" & 12 + 3 * CInt(Mid(shp.Name, 10, 3))).Left
+                shp.Left = intPositionLeft
+                intPositionTop = ws.Range("T" & 12 + 3 * CInt(Mid(shp.Name, 10, 3))).Top
+                shp.Top = intPositionTop
+                Faktor = ws.Range("T12").Height * 2
+                shp.Height = Faktor
+                shp.Visible = False
+            End If
+        End If
+   Next
+
+   flgVerbindungen = Verbindungen_Einfuegen(strName)
+        
+End Sub
